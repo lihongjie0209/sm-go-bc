@@ -1,0 +1,20 @@
+{
+  "name": "sm-go-bc",
+  "version": "1.0.0",
+  "description": "**Complete, production-ready implementation of Chinese National Cryptographic Standards (SM2, SM3, SM4) in pure Go, with zero external dependencies.**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "sm-js-bc": "file:../sm-js-bc"
+  }
+}

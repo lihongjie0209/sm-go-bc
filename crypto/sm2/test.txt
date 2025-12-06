@@ -1,0 +1,22 @@
+=== SM3 Hash Function Demo ===
+1. Simple Hash:
+   Input: Hello, SM3!
+   Hash:  21b937fed61e685b8ac08c67fe9a3300437f2ca44547dea06e0cfe30219fdc4c
+
+2. Incremental Hashing:
+   Input parts: [Hello ,  SM3 !]
+   Hash:        21b937fed61e685b8ac08c67fe9a3300437f2ca44547dea06e0cfe30219fdc4c
+   鉁?Incremental hash matches single-chunk hash
+
+3. Hash Comparison:
+   Data 1: abc -> Hash: 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
+   Data 2: abc -> Hash: 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
+   鉁?Hashes match (same input)
+   Data 3: abd -> Hash: 0d608ca5ec24a9d91b2f8506047a4f9882bf1a211d07d495e98d246bd112c70c
+   鉁?Hashes differ (different input)
+
+4. Using Memoable (State Copy):
+   Common prefix: 'Prefix: '
+   Branch A: 'Message A' -> 63b38e33fa9a3a101f59730df4631866...
+   Branch B: 'Message B' -> 3ce9def688301450c85cb9687053d82c...
+   鉁?State cloning allows efficient branching
