@@ -31,11 +31,18 @@ jobs:
           go mod verify
           echo "✓ Dependencies verified"
       
+      - name: Run unit tests
+        run: |
+          echo "🧪 Running unit tests..."
+          # Test core packages (exclude interop tests which require Python/JS setup)
+          go test -v -race ./crypto/digests ./crypto/engines ./crypto/modes ./crypto/paddings ./crypto/params ./util
+          echo "✅ Unit tests passed!"
+      
       - name: Build verification
         run: |
-          echo "✓ Verifying module structure..."
-          go list -m
-          echo "✓ Module structure verified for release"
+          echo "🔨 Building packages..."
+          go build -v $(go list ./... | grep -v /examples | grep -v /tests/interop)
+          echo "✅ Build successful!"
       
       - name: Extract version from tag
         id: version

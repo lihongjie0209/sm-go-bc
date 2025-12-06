@@ -33,10 +33,23 @@ jobs:
         run: go mod verify
       
       - name: Build package
-        run: go build -v $(go list ./... | grep -v /examples)
+        run: |
+          echo "🔨 Building packages..."
+          go build -v $(go list ./... | grep -v /examples | grep -v /tests/interop)
+          echo "✅ Build successful!"
       
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /examples)
+        run: |
+          echo "🧪 Running unit tests with coverage..."
+          # Test core packages (exclude interop tests which require additional setup)
+          go test -v -race -coverprofile=coverage.out \
+            ./crypto/digests \
+            ./crypto/engines \
+            ./crypto/modes \
+            ./crypto/paddings \
+            ./crypto/params \
+            ./util
+          echo "✅ Tests passed!"
       
       - name: Generate coverage report
         if: matrix.go-version == '1.22'
@@ -53,7 +66,10 @@ jobs:
           retention-days: 7
       
       - name: Run go vet
-        run: go vet $(go list ./... | grep -v /examples)
+        run: |
+          echo "🔍 Running go vet..."
+          go vet $(go list ./... | grep -v /examples | grep -v /tests/interop)
+          echo "✅ No issues found!"
       
       - name: Run staticcheck
         uses: dominikh/staticcheck-action@v1
