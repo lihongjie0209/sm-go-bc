@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # 匹配版本标签，如 v1.0.0, v0.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      
+      - name: Run tests
+        run: go test -v -race ./...
+      
+      - name: Build verification
+        run: go build -v ./...
+      
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            # 提取当前版本的变更日志
+            CHANGELOG=$(awk "/## \[${VERSION}\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md || echo "See commit history for changes.")
+          else
+            # 如果没有 CHANGELOG，使用 git log
+            CHANGELOG=$(git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --pretty=format:"- %s" || echo "Initial release")
+          fi
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Release ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 🚀 Release ${{ steps.version.outputs.VERSION }}
+            
+            ### 📦 Installation
+            
+            ```bash
+            go get github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }}
+            ```
+            
+            ### 📚 Documentation
+            
+            - [pkg.go.dev](https://pkg.go.dev/github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }})
+            - [GitHub Repository](https://github.com/${{ github.repository }})
+            
+            ### 📝 Changes
+            
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ---
+            
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'alpha') || contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  publish-to-pkg-go-dev:
+    name: Publish to pkg.go.dev
+    runs-on: ubuntu-latest
+    needs: release
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Trigger pkg.go.dev indexing
+        run: |
+          echo "🔄 Triggering pkg.go.dev indexing for ${{ steps.version.outputs.VERSION }}"
+          
+          # 方法 1: 通过 Go Proxy 触发
+          echo "📡 Requesting from Go Proxy..."
+          curl -f -s "https://proxy.golang.org/github.com/${{ github.repository }}/@v/${{ steps.version.outputs.VERSION }}.info" || echo "Proxy request sent"
+          
+          # 方法 2: 使用 go get 触发
+          echo "📥 Using go get to trigger indexing..."
+          GOPROXY=https://proxy.golang.org,direct go list -m github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }}
+          
+          # 方法 3: 请求 pkg.go.dev API
+          echo "🌐 Requesting pkg.go.dev..."
+          curl -f -s "https://pkg.go.dev/github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }}" > /dev/null || echo "pkg.go.dev request sent"
+          
+          echo "✅ Indexing requests sent!"
+      
+      - name: Wait for indexing
+        run: |
+          echo "⏳ Waiting for pkg.go.dev to index the package..."
+          sleep 30
+      
+      - name: Verify pkg.go.dev availability
+        run: |
+          echo "🔍 Verifying pkg.go.dev availability..."
+          
+          # 检查是否可以通过 go get 获取
+          TEMP_DIR=$(mktemp -d)
+          cd $TEMP_DIR
+          go mod init test
+          
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+            
+            if go get github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }}; then
+              echo "✅ Package successfully available!"
+              go list -m github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }}
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "⏳ Waiting 30 seconds before retry..."
+                sleep 30
+              fi
+            fi
+          done
+          
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "⚠️ Package may not be immediately available. This is normal."
+            echo "ℹ️ It may take up to 30 minutes for pkg.go.dev to index the package."
+          fi
+      
+      - name: Post release info
+        run: |
+          echo "🎉 Release complete!"
+          echo ""
+          echo "📦 Package: github.com/${{ github.repository }}"
+          echo "🏷️ Version: ${{ steps.version.outputs.VERSION }}"
+          echo ""
+          echo "🔗 Links:"
+          echo "  - Repository: https://github.com/${{ github.repository }}"
+          echo "  - Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.VERSION }}"
+          echo "  - pkg.go.dev: https://pkg.go.dev/github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }}"
+          echo ""
+          echo "📥 Install:"
+          echo "  go get github.com/${{ github.repository }}@${{ steps.version.outputs.VERSION }}"
