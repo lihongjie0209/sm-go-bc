@@ -9,6 +9,8 @@ import (
 // Point represents a point on an elliptic curve.
 type Point struct {
 	curve      *Curve
+	X          *big.Int // Public X coordinate
+	Y          *big.Int // Public Y coordinate
 	x          FieldElement
 	y          FieldElement
 	isInfinity bool
@@ -24,6 +26,8 @@ func NewPoint(curve *Curve, x, y FieldElement) *Point {
 	}
 	return &Point{
 		curve:      curve,
+		X:          x.ToBigInt(),
+		Y:          y.ToBigInt(),
 		x:          x,
 		y:          y,
 		isInfinity: false,

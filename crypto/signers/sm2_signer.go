@@ -251,30 +251,97 @@ func (s *SM2Signer) addFieldElement(digest *digests.SM3Digest, value *big.Int) {
 	digest.BlockUpdate(bytes, 0, len(bytes))
 }
 
-// encodeSignature encodes r and s as r || s (64 bytes total, 32 bytes each).
+// encodeSignature encodes r and s in DER format for interoperability.
 func (s *SM2Signer) encodeSignature(r, sig *big.Int) []byte {
-	result := make([]byte, 64)
-	rBytes := r.Bytes()
-	sBytes := sig.Bytes()
-
-	// Pad r to 32 bytes
-	copy(result[32-len(rBytes):32], rBytes)
-	// Pad s to 32 bytes
-	copy(result[64-len(sBytes):64], sBytes)
-
-	return result
+	return encodeDERSignature(r, sig)
 }
 
-// decodeSignature decodes r and s from signature bytes.
+// decodeSignature decodes r and s from DER format signature bytes.
 func (s *SM2Signer) decodeSignature(signature []byte) (*big.Int, *big.Int, error) {
-	if len(signature) != 64 {
+	return decodeDERSignature(signature)
+}
+
+// encodeDERSignature encodes r and s in ASN.1 DER format.
+// DER format: 0x30 || length || 0x02 || r_length || r || 0x02 || s_length || s
+func encodeDERSignature(r, s *big.Int) []byte {
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+	
+	// Add leading zero if high bit is set (to keep positive)
+	if len(rBytes) > 0 && rBytes[0]&0x80 != 0 {
+		rBytes = append([]byte{0x00}, rBytes...)
+	}
+	if len(sBytes) > 0 && sBytes[0]&0x80 != 0 {
+		sBytes = append([]byte{0x00}, sBytes...)
+	}
+	
+	// Build DER sequence
+	der := make([]byte, 0, 6+len(rBytes)+len(sBytes))
+	
+	// SEQUENCE tag
+	der = append(der, 0x30)
+	// Total length (will be filled later)
+	totalLen := 2 + len(rBytes) + 2 + len(sBytes)
+	der = append(der, byte(totalLen))
+	
+	// INTEGER tag for r
+	der = append(der, 0x02)
+	der = append(der, byte(len(rBytes)))
+	der = append(der, rBytes...)
+	
+	// INTEGER tag for s
+	der = append(der, 0x02)
+	der = append(der, byte(len(sBytes)))
+	der = append(der, sBytes...)
+	
+	return der
+}
+
+// decodeDERSignature decodes r and s from ASN.1 DER format.
+func decodeDERSignature(signature []byte) (*big.Int, *big.Int, error) {
+	if len(signature) < 8 {
 		return nil, nil, errors.New("invalid signature length")
 	}
-
-	r := new(big.Int).SetBytes(signature[0:32])
-	sig := new(big.Int).SetBytes(signature[32:64])
-
-	return r, sig, nil
+	
+	// Check SEQUENCE tag
+	if signature[0] != 0x30 {
+		return nil, nil, errors.New("invalid DER signature: expected SEQUENCE tag")
+	}
+	
+	// Get total length
+	totalLen := int(signature[1])
+	if len(signature) != totalLen+2 {
+		return nil, nil, errors.New("invalid DER signature: length mismatch")
+	}
+	
+	pos := 2
+	
+	// Parse r
+	if signature[pos] != 0x02 {
+		return nil, nil, errors.New("invalid DER signature: expected INTEGER tag for r")
+	}
+	pos++
+	rLen := int(signature[pos])
+	pos++
+	if pos+rLen > len(signature) {
+		return nil, nil, errors.New("invalid DER signature: r length out of bounds")
+	}
+	r := new(big.Int).SetBytes(signature[pos : pos+rLen])
+	pos += rLen
+	
+	// Parse s
+	if signature[pos] != 0x02 {
+		return nil, nil, errors.New("invalid DER signature: expected INTEGER tag for s")
+	}
+	pos++
+	sLen := int(signature[pos])
+	pos++
+	if pos+sLen > len(signature) {
+		return nil, nil, errors.New("invalid DER signature: s length out of bounds")
+	}
+	s := new(big.Int).SetBytes(signature[pos : pos+sLen])
+	
+	return r, s, nil
 }
 
 // randRange generates a random number in [1, max-1].

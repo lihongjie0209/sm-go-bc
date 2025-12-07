@@ -8,24 +8,37 @@ import (
 // Curve represents an elliptic curve over Fp.
 // Curve equation: y^2 = x^3 + ax + b (mod p)
 type Curve struct {
-	p        *big.Int     // Field modulus
-	a        FieldElement // Curve coefficient a
-	b        FieldElement // Curve coefficient b
-	order    *big.Int     // Order of base point
-	cofactor int          // Cofactor
-	g        *Point       // Base point (generator)
+	P *big.Int     // Field modulus
+	A FieldElement // Curve coefficient a
+	B FieldElement // Curve coefficient b
+	N *big.Int     // Order of base point (renamed from order for consistency)
+	H int          // Cofactor (renamed from cofactor for consistency)
+	G *Point       // Base point (generator)
+	p        *big.Int     // Field modulus (private, for backward compatibility)
+	a        FieldElement // Curve coefficient a (private)
+	b        FieldElement // Curve coefficient b (private)
+	order    *big.Int     // Order of base point (private)
+	cofactor int          // Cofactor (private)
+	g        *Point       // Base point (private)
 }
 
 // NewCurve creates a new elliptic curve.
 func NewCurve(p, a, b, order *big.Int, cofactor int) *Curve {
 	aField := NewFp(p, a)
 	bField := NewFp(p, b)
+	pCopy := new(big.Int).Set(p)
+	orderCopy := new(big.Int).Set(order)
 	
 	return &Curve{
-		p:        new(big.Int).Set(p),
+		P:        pCopy,
+		A:        aField,
+		B:        bField,
+		N:        orderCopy,
+		H:        cofactor,
+		p:        pCopy,
 		a:        aField,
 		b:        bField,
-		order:    new(big.Int).Set(order),
+		order:    orderCopy,
 		cofactor: cofactor,
 	}
 }
@@ -62,12 +75,18 @@ func (c *Curve) GetG() *Point {
 
 // SetG sets the base point.
 func (c *Curve) SetG(g *Point) {
+	c.G = g
 	c.g = g
 }
 
 // GetFieldSize returns the bit length of the field.
 func (c *Curve) GetFieldSize() int {
-	return c.p.BitLen()
+	return c.P.BitLen()
+}
+
+// FieldSize returns the bit length of the field (alias for GetFieldSize).
+func (c *Curve) FieldSize() int {
+	return c.GetFieldSize()
 }
 
 // CreatePoint creates a point on the curve from big.Int coordinates.
@@ -111,4 +130,24 @@ func (c *Curve) Equals(other *Curve) bool {
 	return c.p.Cmp(other.p) == 0 &&
 		c.a.Equals(other.a) &&
 		c.b.Equals(other.b)
+}
+
+// ScalarBaseMult multiplies the base point G by a scalar k.
+func (c *Curve) ScalarBaseMult(k []byte) *Point {
+	if c.G == nil {
+		panic("base point G is not set")
+	}
+	kInt := new(big.Int).SetBytes(k)
+	return c.G.Multiply(kInt)
+}
+
+// ScalarMult multiplies a point P by a scalar k.
+func (c *Curve) ScalarMult(p *Point, k []byte) *Point {
+	kInt := new(big.Int).SetBytes(k)
+	return p.Multiply(kInt)
+}
+
+// Add adds two points on the curve.
+func (c *Curve) Add(p1, p2 *Point) *Point {
+	return p1.Add(p2)
 }

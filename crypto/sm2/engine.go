@@ -30,7 +30,7 @@ const (
 func NewSM2Engine() *SM2Engine {
 	return &SM2Engine{
 		curve: GetCurve(),
-		mode:  Mode_C1C3C2, // Default to new standard
+		mode:  Mode_C1C2C3, // Default to old standard for compatibility with JS/other implementations
 	}
 }
 

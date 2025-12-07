@@ -30,8 +30,9 @@ func TestSM2SignerBasic(t *testing.T) {
 		t.Fatalf("GenerateSignature failed: %v", err)
 	}
 
-	if len(signature) != 64 {
-		t.Errorf("Expected signature length 64, got %d", len(signature))
+	// DER signature length is variable (typically 70-72 bytes)
+	if len(signature) < 8 || len(signature) > 80 {
+		t.Errorf("Expected DER signature length 8-80 bytes, got %d", len(signature))
 	}
 
 	// Verify the signature
