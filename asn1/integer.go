@@ -67,12 +67,14 @@ func NewASN1IntegerFromBytes(bytes []byte) (*ASN1Integer, error) {
 	valueBytes := bytes[dataStart : dataStart+length]
 	
 	// Convert to big.Int (handles negative numbers via two's complement)
+	// Note: We manually parse DER format here instead of using asn1.Unmarshal
+	// because we need to control the exact byte structure for round-tripping
 	value := new(big.Int).SetBytes(valueBytes)
 	
-	// Check if negative (MSB is set)
+	// Check if negative (MSB is set in DER encoding)
 	if len(valueBytes) > 0 && valueBytes[0]&0x80 != 0 {
-		// Convert from two's complement
-		// Create a mask of all 1s for the bit length
+		// Convert from two's complement representation
+		// For negative numbers in DER: subtract 2^(8*n) where n is byte length
 		mask := new(big.Int).Lsh(big.NewInt(1), uint(len(valueBytes)*8))
 		value.Sub(value, mask)
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
+	"io"
 	"math/big"
 	"testing"
 	"time"
@@ -221,7 +222,7 @@ func generateTestKeyPair(t *testing.T) (*big.Int, *ec.Point) {
 	return d, Q
 }
 
-func randFieldElement(random interface{}, n *big.Int) (*big.Int, error) {
+func randFieldElement(random io.Reader, n *big.Int) (*big.Int, error) {
 	b := make([]byte, (n.BitLen()+7)/8)
 	for {
 		_, err := rand.Read(b)
