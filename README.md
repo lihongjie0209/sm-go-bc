@@ -11,16 +11,25 @@
 
 ## ✨ 特性
 
+### 核心算法
 - 🔐 **SM2** - 椭圆曲线公钥密码算法（数字签名、公钥加密、密钥交换）
 - 🔒 **SM3** - 密码杂凑算法（256位消息摘要）
 - 🔑 **SM4** - 分组密码算法（128位对称加密）
+- 🔐 **HMAC-SM3** - 基于SM3的消息认证码（RFC 2104）
+- 📡 **ZUC** - 祖冲之序列密码算法（3GPP LTE/5G）
+  - ZUC-128 流密码引擎
+  - ZUC-256 增强安全流密码
+  - ZUC-128 MAC (128-EIA3) - 3GPP完整性保护
+  - ZUC-256 MAC - 增强MAC支持
 
+### 特点
 - 🎯 **零外部依赖** - 纯 Go 标准库实现
 - 🔒 **完全兼容** - 与 Bouncy Castle Java、sm-js-bc 完全互操作
-- 🧪 **充分测试** - 50+ 单元测试用例
+- 🧪 **充分测试** - 200+ 单元测试用例
 - 📚 **完整文档** - 详细的 API 文档和使用指南
 - ✅ **高质量** - GitHub Actions 自动化测试
 - 🚀 **生产就绪** - 稳定的 API 和完善的错误处理
+- 📱 **3GPP标准** - 支持LTE/5G加密和完整性保护
 
 ## 📦 安装
 
@@ -193,6 +202,77 @@ func main() {
 
 📖 **完整示例**: [examples/sm2_encryption_demo.go](./examples/sm2_encryption_demo.go)
 
+### HMAC-SM3 消息认证
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/lihongjie0209/sm-go-bc/crypto/digests"
+    "github.com/lihongjie0209/sm-go-bc/crypto/macs"
+    "github.com/lihongjie0209/sm-go-bc/crypto/params"
+)
+
+func main() {
+    // 创建 HMAC-SM3
+    hmac := macs.NewHMac(digests.NewSM3Digest())
+    
+    // 使用密钥初始化
+    key := []byte("secret-key")
+    hmac.Init(params.NewKeyParameter(key))
+    
+    // 处理消息
+    message := []byte("Hello, HMAC-SM3!")
+    hmac.UpdateArray(message, 0, len(message))
+    
+    // 获取 MAC
+    mac := make([]byte, hmac.GetMacSize())
+    hmac.DoFinal(mac, 0)
+    
+    fmt.Printf("HMAC-SM3: %x\n", mac)
+}
+```
+
+📖 **完整示例**: [examples/hmac_demo.go](./examples/hmac_demo.go)
+
+### ZUC 流密码（3GPP LTE/5G）
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/lihongjie0209/sm-go-bc/crypto/engines"
+    "github.com/lihongjie0209/sm-go-bc/crypto/macs"
+    "github.com/lihongjie0209/sm-go-bc/crypto/params"
+)
+
+func main() {
+    // ZUC-128 加密
+    engine := engines.NewZUCEngine()
+    key := make([]byte, 16)  // 128-bit key
+    iv := make([]byte, 16)   // 128-bit IV
+    engine.Init(true, params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+    
+    plaintext := []byte("Hello, ZUC!")
+    ciphertext := make([]byte, len(plaintext))
+    engine.ProcessBytes(plaintext, 0, len(plaintext), ciphertext, 0)
+    
+    // ZUC-128 MAC (128-EIA3) - 3GPP完整性保护
+    mac := macs.NewZuc128Mac()
+    mac.Init(params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+    mac.UpdateArray(plaintext, 0, len(plaintext))
+    macValue := make([]byte, mac.GetMacSize())
+    mac.DoFinal(macValue, 0)
+    
+    fmt.Printf("ZUC-128 Ciphertext: %x\n", ciphertext)
+    fmt.Printf("ZUC-128 MAC: %x\n", macValue)
+}
+```
+
+📖 **完整示例**: [examples/zuc_demo.go](./examples/zuc_demo.go)
+
 ---
 
 ## 📚 完整示例
@@ -209,6 +289,8 @@ func main() {
 | [sm2_demo.go](./examples/sm2_demo.go) | SM2 基础功能 | 密钥生成、签名验签 |
 | [sm2_sign_demo.go](./examples/sm2_sign_demo.go) | SM2 数字签名 | 完整签名验签流程 |
 | [sm2_encryption_demo.go](./examples/sm2_encryption_demo.go) | SM2 公钥加密 | 加密解密演示 |
+| [hmac_demo.go](./examples/hmac_demo.go) | HMAC-SM3 | 消息认证、密钥派生 |
+| [zuc_demo.go](./examples/zuc_demo.go) | ZUC 流密码 | ZUC-128/256加密、MAC |
 
 ### 🚀 运行示例
 
