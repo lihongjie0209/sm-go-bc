@@ -76,25 +76,26 @@ const (
 
 // ParseCertificate parses an X.509 certificate from DER-encoded bytes.
 func ParseCertificate(der []byte) (*Certificate, error) {
-	// Use Go's standard x509 package to parse the structure
 	cert := &Certificate{
 		Raw: der,
 	}
 	
-	// Parse the ASN.1 structure
+	// Parse the outer certificate structure
 	var rawCert struct {
-		Raw                asn1.RawContent
-		TBSCertificate     asn1.RawContent
+		TBSCertificate     asn1.RawValue
 		SignatureAlgorithm pkix.AlgorithmIdentifier
 		SignatureValue     asn1.BitString
 	}
 	
-	_, err := asn1.Unmarshal(der, &rawCert)
+	rest, err := asn1.Unmarshal(der, &rawCert)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse certificate: %w", err)
 	}
+	if len(rest) > 0 {
+		return nil, fmt.Errorf("trailing data after certificate")
+	}
 	
-	cert.RawTBSCertificate = rawCert.TBSCertificate
+	cert.RawTBSCertificate = rawCert.TBSCertificate.FullBytes
 	cert.SignatureAlgorithm = rawCert.SignatureAlgorithm
 	cert.Signature = rawCert.SignatureValue.RightAlign()
 	
@@ -110,7 +111,6 @@ func ParseCertificate(der []byte) (*Certificate, error) {
 // parseTBSCertificate parses the TBSCertificate portion.
 func parseTBSCertificate(cert *Certificate) error {
 	var tbs struct {
-		Raw                asn1.RawContent
 		Version            int `asn1:"optional,explicit,default:0,tag:0"`
 		SerialNumber       *big.Int
 		SignatureAlgorithm pkix.AlgorithmIdentifier
@@ -118,16 +118,19 @@ func parseTBSCertificate(cert *Certificate) error {
 		Validity           struct {
 			NotBefore, NotAfter time.Time
 		}
-		Subject            asn1.RawValue
-		PublicKey          asn1.RawContent
-		IssuerUniqueId     asn1.BitString `asn1:"optional,tag:1"`
-		SubjectUniqueId    asn1.BitString `asn1:"optional,tag:2"`
-		Extensions         []pkix.Extension `asn1:"optional,explicit,tag:3"`
+		Subject         asn1.RawValue
+		PublicKey       asn1.RawValue
+		IssuerUniqueId  asn1.BitString   `asn1:"optional,tag:1"`
+		SubjectUniqueId asn1.BitString   `asn1:"optional,tag:2"`
+		Extensions      []pkix.Extension `asn1:"optional,explicit,tag:3"`
 	}
 	
-	_, err := asn1.Unmarshal(cert.RawTBSCertificate, &tbs)
+	rest, err := asn1.Unmarshal(cert.RawTBSCertificate, &tbs)
 	if err != nil {
 		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("trailing data in TBS certificate")
 	}
 	
 	cert.Version = tbs.Version
@@ -153,8 +156,8 @@ func parseTBSCertificate(cert *Certificate) error {
 	cert.Subject.FillFromRDNSequence(&subjectRDN)
 	
 	// Parse public key
-	cert.RawSubjectPublicKeyInfo = tbs.PublicKey
-	pubKey, err := pkcs8.ParseSM2PublicKey(tbs.PublicKey)
+	cert.RawSubjectPublicKeyInfo = tbs.PublicKey.FullBytes
+	pubKey, err := pkcs8.ParseSM2PublicKey(tbs.PublicKey.FullBytes)
 	if err != nil {
 		return fmt.Errorf("failed to parse public key: %w", err)
 	}

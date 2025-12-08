@@ -43,10 +43,264 @@ func TestCreateSimpleSM2Certificate(t *testing.T) {
 	}
 	
 	t.Logf("Certificate DER length: %d bytes", len(certDER))
-	
-	// For now, just verify the certificate was created successfully
-	// TODO: Add ParseCertificate and full verification later
 	t.Logf("Certificate created successfully")
+}
+
+// TestCertificateRoundtrip tests creating and parsing a certificate.
+func TestCertificateRoundtrip(t *testing.T) {
+	// Generate a key pair
+	d, Q := generateTestKeyPair(t)
+	
+	// Create certificate
+	template := &CertificateTemplate{
+		SerialNumber: big.NewInt(12345),
+		Subject: pkix.Name{
+			CommonName:   "Test Certificate",
+			Organization: []string{"Test Organization"},
+			Country:      []string{"CN"},
+		},
+		NotBefore:  time.Now().Add(-1 * time.Hour).Truncate(time.Second),
+		NotAfter:   time.Now().Add(365 * 24 * time.Hour).Truncate(time.Second),
+		KeyUsage:   KeyUsageDigitalSignature | KeyUsageCertSign,
+		IsCA:       true,
+		MaxPathLen: 0,
+	}
+	
+	certDER, err := CreateCertificate(template, template, Q, d, Q)
+	if err != nil {
+		t.Fatalf("Failed to create certificate: %v", err)
+	}
+	
+	// Parse the certificate
+	cert, err := ParseCertificate(certDER)
+	if err != nil {
+		t.Fatalf("Failed to parse certificate: %v", err)
+	}
+	
+	// Verify fields
+	if cert.SerialNumber.Cmp(template.SerialNumber) != 0 {
+		t.Errorf("Serial number mismatch: got %v, want %v", cert.SerialNumber, template.SerialNumber)
+	}
+	
+	if cert.Subject.CommonName != template.Subject.CommonName {
+		t.Errorf("Subject CN mismatch: got %v, want %v", cert.Subject.CommonName, template.Subject.CommonName)
+	}
+	
+	if !cert.NotBefore.Equal(template.NotBefore) {
+		t.Errorf("NotBefore mismatch: got %v, want %v", cert.NotBefore, template.NotBefore)
+	}
+	
+	if !cert.NotAfter.Equal(template.NotAfter) {
+		t.Errorf("NotAfter mismatch: got %v, want %v", cert.NotAfter, template.NotAfter)
+	}
+	
+	if cert.IsCA != template.IsCA {
+		t.Errorf("IsCA mismatch: got %v, want %v", cert.IsCA, template.IsCA)
+	}
+	
+	if cert.KeyUsage != template.KeyUsage {
+		t.Errorf("KeyUsage mismatch: got %v, want %v", cert.KeyUsage, template.KeyUsage)
+	}
+	
+	// Verify signature
+	if err := verifyCertificateSignature(cert, Q); err != nil {
+		t.Errorf("Signature verification failed: %v", err)
+	}
+	
+	t.Log("Certificate roundtrip successful")
+}
+
+// TestCertificateWithExtensions tests creating a certificate with various extensions.
+func TestCertificateWithExtensions(t *testing.T) {
+	d, Q := generateTestKeyPair(t)
+	
+	template := &CertificateTemplate{
+		SerialNumber: big.NewInt(54321),
+		Subject: pkix.Name{
+			CommonName:         "Extended Certificate",
+			Organization:       []string{"Org"},
+			OrganizationalUnit: []string{"Unit"},
+			Country:            []string{"CN"},
+			Locality:           []string{"Beijing"},
+			Province:           []string{"Beijing"},
+		},
+		NotBefore:  time.Now().Add(-1 * time.Hour).Truncate(time.Second),
+		NotAfter:   time.Now().Add(730 * 24 * time.Hour).Truncate(time.Second),
+		KeyUsage:   KeyUsageDigitalSignature | KeyUsageKeyEncipherment | KeyUsageCertSign,
+		IsCA:       true,
+		MaxPathLen: 2,
+	}
+	
+	certDER, err := CreateCertificate(template, template, Q, d, Q)
+	if err != nil {
+		t.Fatalf("Failed to create certificate: %v", err)
+	}
+	
+	// Parse and verify
+	cert, err := ParseCertificate(certDER)
+	if err != nil {
+		t.Fatalf("Failed to parse certificate: %v", err)
+	}
+	
+	// Check all subject fields
+	if cert.Subject.CommonName != template.Subject.CommonName {
+		t.Errorf("CN mismatch")
+	}
+	if len(cert.Subject.Organization) == 0 || cert.Subject.Organization[0] != template.Subject.Organization[0] {
+		t.Errorf("Organization mismatch")
+	}
+	if len(cert.Subject.OrganizationalUnit) == 0 || cert.Subject.OrganizationalUnit[0] != template.Subject.OrganizationalUnit[0] {
+		t.Errorf("OrganizationalUnit mismatch")
+	}
+	if len(cert.Subject.Locality) == 0 || cert.Subject.Locality[0] != template.Subject.Locality[0] {
+		t.Errorf("Locality mismatch")
+	}
+	if len(cert.Subject.Province) == 0 || cert.Subject.Province[0] != template.Subject.Province[0] {
+		t.Errorf("Province mismatch")
+	}
+	
+	if cert.MaxPathLen != template.MaxPathLen {
+		t.Errorf("MaxPathLen mismatch: got %v, want %v", cert.MaxPathLen, template.MaxPathLen)
+	}
+	
+	t.Log("Certificate with extensions successful")
+}
+
+// TestCertificateChain tests creating a certificate chain (CA -> intermediate -> leaf).
+func TestCertificateChain(t *testing.T) {
+	// Create CA
+	caPriv, caPub := generateTestKeyPair(t)
+	caTemplate := &CertificateTemplate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:   "Root CA",
+			Organization: []string{"Test CA"},
+		},
+		NotBefore:  time.Now().Add(-1 * time.Hour).Truncate(time.Second),
+		NotAfter:   time.Now().Add(3650 * 24 * time.Hour).Truncate(time.Second),
+		KeyUsage:   KeyUsageCertSign | KeyUsageCRLSign,
+		IsCA:       true,
+		MaxPathLen: 2,
+	}
+	
+	caCertDER, err := CreateCertificate(caTemplate, caTemplate, caPub, caPriv, caPub)
+	if err != nil {
+		t.Fatalf("Failed to create CA cert: %v", err)
+	}
+	
+	caCert, err := ParseCertificate(caCertDER)
+	if err != nil {
+		t.Fatalf("Failed to parse CA cert: %v", err)
+	}
+	
+	// Create intermediate cert signed by CA
+	intPriv, intPub := generateTestKeyPair(t)
+	intTemplate := &CertificateTemplate{
+		SerialNumber: big.NewInt(2),
+		Subject: pkix.Name{
+			CommonName:   "Intermediate CA",
+			Organization: []string{"Test CA"},
+		},
+		NotBefore:  time.Now().Add(-1 * time.Hour).Truncate(time.Second),
+		NotAfter:   time.Now().Add(1825 * 24 * time.Hour).Truncate(time.Second),
+		KeyUsage:   KeyUsageCertSign | KeyUsageCRLSign,
+		IsCA:       true,
+		MaxPathLen: 1,
+	}
+	
+	intCertDER, err := CreateCertificate(intTemplate, caTemplate, intPub, caPriv, caPub)
+	if err != nil {
+		t.Fatalf("Failed to create intermediate cert: %v", err)
+	}
+	
+	intCert, err := ParseCertificate(intCertDER)
+	if err != nil {
+		t.Fatalf("Failed to parse intermediate cert: %v", err)
+	}
+	
+	// Verify intermediate cert is signed by CA
+	if err := verifyCertificateSignature(intCert, caPub); err != nil {
+		t.Errorf("Failed to verify intermediate cert signature: %v", err)
+	}
+	
+	// Create leaf cert signed by intermediate
+	_, leafPub := generateTestKeyPair(t)
+	leafTemplate := &CertificateTemplate{
+		SerialNumber: big.NewInt(3),
+		Subject: pkix.Name{
+			CommonName: "leaf.example.com",
+		},
+		NotBefore: time.Now().Add(-1 * time.Hour).Truncate(time.Second),
+		NotAfter:  time.Now().Add(365 * 24 * time.Hour).Truncate(time.Second),
+		KeyUsage:  KeyUsageDigitalSignature | KeyUsageKeyEncipherment,
+		IsCA:      false,
+	}
+	
+	leafCertDER, err := CreateCertificate(leafTemplate, intTemplate, leafPub, intPriv, intPub)
+	if err != nil {
+		t.Fatalf("Failed to create leaf cert: %v", err)
+	}
+	
+	leafCert, err := ParseCertificate(leafCertDER)
+	if err != nil {
+		t.Fatalf("Failed to parse leaf cert: %v", err)
+	}
+	
+	// Verify leaf cert is signed by intermediate
+	if err := verifyCertificateSignature(leafCert, intPub); err != nil {
+		t.Errorf("Failed to verify leaf cert signature: %v", err)
+	}
+	
+	// Verify the chain
+	if caCert.IsCA != true {
+		t.Error("CA cert should be CA")
+	}
+	if intCert.IsCA != true {
+		t.Error("Intermediate cert should be CA")
+	}
+	if leafCert.IsCA != false {
+		t.Error("Leaf cert should not be CA")
+	}
+	
+	t.Log("Certificate chain verification successful")
+}
+
+// TestMultipleCertificates tests creating multiple independent certificates.
+func TestMultipleCertificates(t *testing.T) {
+	for i := 0; i < 3; i++ {
+		d, Q := generateTestKeyPair(t)
+		
+		template := &CertificateTemplate{
+			SerialNumber: big.NewInt(int64(100 + i)),
+			Subject: pkix.Name{
+				CommonName: fmt.Sprintf("Test Cert %d", i),
+			},
+			NotBefore: time.Now().Add(-1 * time.Hour).Truncate(time.Second),
+			NotAfter:  time.Now().Add(365 * 24 * time.Hour).Truncate(time.Second),
+			KeyUsage:  KeyUsageDigitalSignature,
+			IsCA:      false,
+		}
+		
+		certDER, err := CreateCertificate(template, template, Q, d, Q)
+		if err != nil {
+			t.Fatalf("Failed to create cert %d: %v", i, err)
+		}
+		
+		cert, err := ParseCertificate(certDER)
+		if err != nil {
+			t.Fatalf("Failed to parse cert %d: %v", i, err)
+		}
+		
+		if cert.SerialNumber.Int64() != int64(100+i) {
+			t.Errorf("Cert %d: serial number mismatch", i)
+		}
+		
+		if err := verifyCertificateSignature(cert, Q); err != nil {
+			t.Errorf("Cert %d: signature verification failed: %v", i, err)
+		}
+	}
+	
+	t.Log("Multiple certificates test passed")
 }
 
 // CertificateTemplate represents a template for creating X.509 certificates.
@@ -191,21 +445,50 @@ func CreateCertificate(
 	
 	// TBS bytes are already marshalled, use them directly
 	
-	// Build final certificate
-	cert := struct {
-		TBSCertificate     asn1.RawContent
-		SignatureAlgorithm pkix.AlgorithmIdentifier
-		SignatureValue     asn1.BitString
-	}{
-		TBSCertificate:     tbsBytes,
-		SignatureAlgorithm: sigAlg,
-		SignatureValue: asn1.BitString{
-			Bytes:     signature,
-			BitLength: len(signature) * 8,
-		},
+	// Build final certificate structure manually
+	// Certificate ::= SEQUENCE {
+	//   tbsCertificate       TBSCertificate,
+	//   signatureAlgorithm   AlgorithmIdentifier,
+	//   signatureValue       BIT STRING  }
+	
+	// Marshal signature algorithm
+	sigAlgBytes, err := asn1.Marshal(sigAlg)
+	if err != nil {
+		return nil, err
 	}
 	
-	return asn1.Marshal(cert)
+	// Marshal signature value
+	sigValueBytes, err := asn1.Marshal(asn1.BitString{
+		Bytes:     signature,
+		BitLength: len(signature) * 8,
+	})
+	if err != nil {
+		return nil, err
+	}
+	
+	// Build certificate as raw ASN.1 SEQUENCE
+	certBytes := append([]byte{}, tbsBytes...)
+	certBytes = append(certBytes, sigAlgBytes...)
+	certBytes = append(certBytes, sigValueBytes...)
+	
+	// Wrap in SEQUENCE
+	certLen := len(certBytes)
+	var lengthBytes []byte
+	if certLen < 128 {
+		lengthBytes = []byte{byte(certLen)}
+	} else {
+		// Long form
+		var lenBuf []byte
+		for l := certLen; l > 0; l >>= 8 {
+			lenBuf = append([]byte{byte(l)}, lenBuf...)
+		}
+		lengthBytes = append([]byte{0x80 | byte(len(lenBuf))}, lenBuf...)
+	}
+	
+	result := append([]byte{0x30}, lengthBytes...)  // SEQUENCE tag
+	result = append(result, certBytes...)
+	
+	return result, nil
 }
 
 // Helper functions
