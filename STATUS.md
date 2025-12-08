@@ -15,7 +15,7 @@
 ✅ ZUC-256 Engine       - 20+ tests, enhanced security
 ✅ ZUC MACs             - 60+ tests, 3GPP TS 35.223
 ✅ Cross-Language Tests - All passing (Go ↔ JS)
-✅ 10/10 Test Suites    - 200+ total tests
+✅ 10/10 Test Suites    - 500+ total tests
 ```
 
 ## Running Tests
@@ -74,7 +74,8 @@ ciphertext := cipher.ProcessBytes(plaintext)
 hmac := macs.NewHMac(digests.NewSM3Digest())
 hmac.Init(params.NewKeyParameter(key))
 hmac.UpdateArray(message, 0, len(message))
-mac := hmac.DoFinal()
+mac := make([]byte, hmac.GetMacSize())
+hmac.DoFinal(mac, 0)
 
 // ZUC-128 Stream Cipher
 zuc := engines.NewZUCEngine()
