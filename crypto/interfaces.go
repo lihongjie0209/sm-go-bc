@@ -175,3 +175,32 @@ type Agreement interface {
 	// CalculateAgreement calculates the agreement value
 	CalculateAgreement(params CipherParameters) []byte
 }
+
+// StreamCipher defines the interface for stream cipher engines.
+// Reference: org.bouncycastle.crypto.StreamCipher
+type StreamCipher interface {
+	// Init initializes the cipher
+	// forEncryption: if true the cipher is initialized for encryption, if false for decryption
+	// params: the key and other data required by the cipher
+	Init(forEncryption bool, params CipherParameters) error
+
+	// GetAlgorithmName returns the name of the algorithm the cipher implements
+	GetAlgorithmName() string
+
+	// ReturnByte encrypts/decrypts a single byte
+	// input: the byte to process
+	// Returns: the processed byte
+	ReturnByte(input byte) (byte, error)
+
+	// ProcessBytes processes a block of bytes
+	// input: the input byte array
+	// inOff: the offset into the input array where the data starts
+	// len: the number of bytes to be processed
+	// output: the output buffer the processed bytes go into
+	// outOff: the offset into the output byte array the processed data starts at
+	// Returns: the number of bytes produced
+	ProcessBytes(input []byte, inOff int, length int, output []byte, outOff int) (int, error)
+
+	// Reset resets the cipher to the same state as it was after the last init
+	Reset()
+}
