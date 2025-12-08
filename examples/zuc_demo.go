@@ -5,13 +5,14 @@ import (
 	"fmt"
 
 	"github.com/lihongjie0209/sm-go-bc/crypto/engines"
+	"github.com/lihongjie0209/sm-go-bc/crypto/macs"
 	"github.com/lihongjie0209/sm-go-bc/crypto/params"
 )
 
 func main() {
-	fmt.Println("=== ZUC-128 Stream Cipher Demo ===\n")
+	fmt.Println("=== ZUC Stream Cipher & MAC Demo ===\n")
 
-	// Example 1: Basic ZUC usage
+	// Example 1: Basic ZUC-128
 	fmt.Println("Example 1: Basic ZUC-128 Encryption")
 	fmt.Println("------------------------------------")
 	basicZUCExample()
@@ -21,13 +22,23 @@ func main() {
 	fmt.Println("--------------------------------------")
 	encryptDecryptExample()
 
-	// Example 3: Streaming Data
-	fmt.Println("\nExample 3: Streaming Data Processing")
-	fmt.Println("--------------------------------------")
-	streamingExample()
+	// Example 3: ZUC-256 Enhanced Security
+	fmt.Println("\nExample 3: ZUC-256 (Enhanced Security)")
+	fmt.Println("----------------------------------------")
+	zuc256Example()
 
-	// Example 4: Different Keys Produce Different Ciphertexts
-	fmt.Println("\nExample 4: Key Sensitivity")
+	// Example 4: ZUC-128 MAC (128-EIA3)
+	fmt.Println("\nExample 4: ZUC-128 MAC (3GPP 128-EIA3)")
+	fmt.Println("----------------------------------------")
+	zuc128MacExample()
+
+	// Example 5: ZUC-256 MAC
+	fmt.Println("\nExample 5: ZUC-256 MAC")
+	fmt.Println("-----------------------")
+	zuc256MacExample()
+
+	// Example 6: Key Sensitivity
+	fmt.Println("\nExample 6: Key Sensitivity")
 	fmt.Println("---------------------------")
 	keySensitivityExample()
 }
@@ -107,50 +118,107 @@ func encryptDecryptExample() {
 	}
 }
 
-func streamingExample() {
+
+
+func zuc256Example() {
+	// ZUC-256 uses 256-bit keys and 184-bit IVs for enhanced security
+	key := make([]byte, 32) // 256-bit key
+	iv := make([]byte, 23)  // 184-bit IV
+	for i := 0; i < 32; i++ {
+		key[i] = byte(i)
+	}
+	for i := 0; i < 23; i++ {
+		iv[i] = byte(i + 32)
+	}
+
+	plaintext := []byte("ZUC-256 provides enhanced security for 5G and beyond")
+
+	// Encrypt
+	engine := engines.NewZuc256Engine()
+	engine.Init(true, params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+	ciphertext := make([]byte, len(plaintext))
+	engine.ProcessBytes(plaintext, 0, len(plaintext), ciphertext, 0)
+
+	fmt.Printf("Plaintext:  %s\n", string(plaintext))
+	fmt.Printf("Key:        %s... (256-bit)\n", hex.EncodeToString(key[:16]))
+	fmt.Printf("IV:         %s... (184-bit)\n", hex.EncodeToString(iv[:12]))
+	fmt.Printf("Ciphertext: %s...\n", hex.EncodeToString(ciphertext[:32]))
+
+	// Decrypt
+	engine.Reset()
+	decrypted := make([]byte, len(ciphertext))
+	engine.ProcessBytes(ciphertext, 0, len(ciphertext), decrypted, 0)
+
+	fmt.Printf("Decrypted:  %s\n", string(decrypted))
+	fmt.Printf("✓ ZUC-256 encryption/decryption successful!\n")
+}
+
+func zuc128MacExample() {
+	// ZUC-128 MAC (128-EIA3) is used for integrity protection in 3GPP LTE/5G
 	key := make([]byte, 16)
 	iv := make([]byte, 16)
 	for i := 0; i < 16; i++ {
 		key[i] = byte(i)
-		iv[i] = byte(16 + i)
+		iv[i] = byte(i + 16)
 	}
 
-	engine := engines.NewZUCEngine()
-	engine.Init(true, params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+	message := []byte("3GPP LTE/5G message requiring integrity protection")
 
-	// Process data in chunks (simulating streaming)
-	chunks := []string{
-		"Chunk 1: ",
-		"Chunk 2: ",
-		"Chunk 3: ",
-		"End.",
+	// Generate MAC
+	mac := macs.NewZuc128Mac() // 32-bit MAC by default
+	mac.Init(params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+	mac.UpdateArray(message, 0, len(message))
+	
+	macValue := make([]byte, mac.GetMacSize())
+	mac.DoFinal(macValue, 0)
+
+	fmt.Printf("Message: %s\n", string(message))
+	fmt.Printf("Key:     %s\n", hex.EncodeToString(key))
+	fmt.Printf("IV:      %s\n", hex.EncodeToString(iv))
+	fmt.Printf("MAC:     %s (%d bits)\n", hex.EncodeToString(macValue), mac.GetMacSize()*8)
+	fmt.Println("Note: Used for 3GPP LTE/5G integrity protection (128-EIA3)")
+}
+
+func zuc256MacExample() {
+	// ZUC-256 MAC provides enhanced security with flexible MAC lengths
+	key := make([]byte, 32)
+	iv := make([]byte, 23)
+	for i := 0; i < 32; i++ {
+		key[i] = byte(i)
+	}
+	for i := 0; i < 23; i++ {
+		iv[i] = byte(i + 32)
 	}
 
-	fmt.Println("Processing data in chunks:")
-	totalCiphertext := []byte{}
+	message := []byte("5G+ message with enhanced integrity protection")
 
-	for i, chunk := range chunks {
-		plaintext := []byte(chunk)
-		ciphertext := make([]byte, len(plaintext))
-		engine.ProcessBytes(plaintext, 0, len(plaintext), ciphertext, 0)
+	fmt.Println("Testing different MAC lengths:")
 
-		fmt.Printf("  Chunk %d: %s -> %s\n", i+1, chunk, hex.EncodeToString(ciphertext))
-		totalCiphertext = append(totalCiphertext, ciphertext...)
-	}
+	// 32-bit MAC
+	mac32 := macs.NewZuc256MacWithLength(32)
+	mac32.Init(params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+	mac32.UpdateArray(message, 0, len(message))
+	macValue32 := make([]byte, mac32.GetMacSize())
+	mac32.DoFinal(macValue32, 0)
+	fmt.Printf("  32-bit MAC:  %s\n", hex.EncodeToString(macValue32))
 
-	// Decrypt all at once
-	engine.Reset()
-	decrypted := make([]byte, len(totalCiphertext))
-	engine.ProcessBytes(totalCiphertext, 0, len(totalCiphertext), decrypted, 0)
+	// 64-bit MAC (default)
+	mac64 := macs.NewZuc256Mac()
+	mac64.Init(params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+	mac64.UpdateArray(message, 0, len(message))
+	macValue64 := make([]byte, mac64.GetMacSize())
+	mac64.DoFinal(macValue64, 0)
+	fmt.Printf("  64-bit MAC:  %s\n", hex.EncodeToString(macValue64))
 
-	fullMessage := ""
-	for _, chunk := range chunks {
-		fullMessage += chunk
-	}
+	// 128-bit MAC
+	mac128 := macs.NewZuc256MacWithLength(128)
+	mac128.Init(params.NewParametersWithIV(params.NewKeyParameter(key), iv))
+	mac128.UpdateArray(message, 0, len(message))
+	macValue128 := make([]byte, mac128.GetMacSize())
+	mac128.DoFinal(macValue128, 0)
+	fmt.Printf("  128-bit MAC: %s\n", hex.EncodeToString(macValue128))
 
-	fmt.Printf("\nOriginal:  %s\n", fullMessage)
-	fmt.Printf("Decrypted: %s\n", string(decrypted))
-	fmt.Printf("Match: %v\n", fullMessage == string(decrypted))
+	fmt.Println("Note: Longer MACs provide stronger integrity guarantees")
 }
 
 func keySensitivityExample() {
