@@ -86,11 +86,16 @@ func NewSM2AlgorithmIdentifier() pkix.AlgorithmIdentifier {
 	// SM2 uses the curve OID as the algorithm parameter
 	curveBytes, _ := asn1.Marshal(OidSM2Curve)
 	
+	// Extract just the OID value bytes, skipping the tag (1 byte) and length (1 byte)
+	// DER encoding: TAG | LENGTH | VALUE
+	// For standard OIDs, tag=0x06 and length is usually 1 byte
+	const derHeaderSize = 2 // TAG (1 byte) + LENGTH (1 byte)
+	
 	return pkix.AlgorithmIdentifier{
 		Algorithm:  OidSM2,
 		Parameters: asn1.RawValue{
 			Tag:   asn.TagObjectIdentifier,
-			Bytes: curveBytes[2:], // Skip the OID tag and length
+			Bytes: curveBytes[derHeaderSize:],
 		},
 	}
 }
@@ -100,11 +105,15 @@ func NewSM2PublicKeyAlgorithmIdentifier() pkix.AlgorithmIdentifier {
 	// For public keys, we use the encryption OID
 	curveBytes, _ := asn1.Marshal(OidSM2Curve)
 	
+	// Extract just the OID value bytes, skipping the tag (1 byte) and length (1 byte)
+	// DER encoding: TAG | LENGTH | VALUE
+	const derHeaderSize = 2
+	
 	return pkix.AlgorithmIdentifier{
 		Algorithm:  OidSM2Encryption,
 		Parameters: asn1.RawValue{
 			Tag:   asn.TagObjectIdentifier,
-			Bytes: curveBytes[2:], // Skip the OID tag and length
+			Bytes: curveBytes[derHeaderSize:],
 		},
 	}
 }

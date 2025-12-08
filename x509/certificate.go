@@ -223,25 +223,13 @@ func parseExtensions(cert *Certificate, extensions []pkix.Extension) error {
 }
 
 // VerifySignature verifies the signature on the certificate using the provided public key.
-// Use verifyCertificateSignature from certificate_test.go for actual verification with SM2Signer.
+// Note: This is a simplified implementation. For production use, consider using
+// Go's standard x509 package with SM2 extensions for full certificate chain validation.
 func (c *Certificate) VerifySignature(publicKey *ec.Point) error {
-	// Verify it's an SM2 certificate
-	if !c.SignatureAlgorithm.Algorithm.Equal(pkcs8.OidSM2) {
-		return fmt.Errorf("unsupported signature algorithm: %v", c.SignatureAlgorithm.Algorithm)
-	}
-	
-	// Parse the signature (r, s)
-	var sig struct {
-		R, S *big.Int
-	}
-	_, err := asn1.Unmarshal(c.Signature, &sig)
-	if err != nil {
-		return fmt.Errorf("failed to parse signature: %w", err)
-	}
-	
-	// Note: For actual verification, use SM2Signer from crypto/signers package
-	// See certificate_test.go for implementation
-	return fmt.Errorf("use verifyCertificateSignature helper for verification")
+	// Note: Full implementation requires importing crypto/signers which would create
+	// a circular dependency (signers -> sm2 -> this package might import signers).
+	// Users should use the verifyCertificateSignature pattern shown in tests.
+	return fmt.Errorf("certificate signature verification not yet implemented - see test file for pattern")
 }
 
 // OIDs for certificate extensions
