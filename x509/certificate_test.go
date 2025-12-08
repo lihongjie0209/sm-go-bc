@@ -445,50 +445,31 @@ func CreateCertificate(
 	
 	// TBS bytes are already marshalled, use them directly
 	
-	// Build final certificate structure manually
+	// Build final certificate structure
 	// Certificate ::= SEQUENCE {
 	//   tbsCertificate       TBSCertificate,
 	//   signatureAlgorithm   AlgorithmIdentifier,
 	//   signatureValue       BIT STRING  }
-	
-	// Marshal signature algorithm
-	sigAlgBytes, err := asn1.Marshal(sigAlg)
-	if err != nil {
-		return nil, err
+	//
+	// Note: We use manual construction here because tbsBytes is already marshalled
+	// and using asn1.RawValue allows us to embed it directly without re-parsing.
+	// This preserves the exact TBS structure for signature verification.
+	cert := struct {
+		TBSCertificate     asn1.RawValue
+		SignatureAlgorithm pkix.AlgorithmIdentifier
+		SignatureValue     asn1.BitString
+	}{
+		TBSCertificate: asn1.RawValue{
+			FullBytes: tbsBytes,
+		},
+		SignatureAlgorithm: sigAlg,
+		SignatureValue: asn1.BitString{
+			Bytes:     signature,
+			BitLength: len(signature) * 8,
+		},
 	}
 	
-	// Marshal signature value
-	sigValueBytes, err := asn1.Marshal(asn1.BitString{
-		Bytes:     signature,
-		BitLength: len(signature) * 8,
-	})
-	if err != nil {
-		return nil, err
-	}
-	
-	// Build certificate as raw ASN.1 SEQUENCE
-	certBytes := append([]byte{}, tbsBytes...)
-	certBytes = append(certBytes, sigAlgBytes...)
-	certBytes = append(certBytes, sigValueBytes...)
-	
-	// Wrap in SEQUENCE
-	certLen := len(certBytes)
-	var lengthBytes []byte
-	if certLen < 128 {
-		lengthBytes = []byte{byte(certLen)}
-	} else {
-		// Long form
-		var lenBuf []byte
-		for l := certLen; l > 0; l >>= 8 {
-			lenBuf = append([]byte{byte(l)}, lenBuf...)
-		}
-		lengthBytes = append([]byte{0x80 | byte(len(lenBuf))}, lenBuf...)
-	}
-	
-	result := append([]byte{0x30}, lengthBytes...)  // SEQUENCE tag
-	result = append(result, certBytes...)
-	
-	return result, nil
+	return asn1.Marshal(cert)
 }
 
 // Helper functions
